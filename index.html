@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>富足軌跡 | 智慧股票投資記帳工具</title>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Outfit & Noto Sans TC) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar or Navigation Header -->
+        <header class="app-header">
+            <div class="header-logo">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-chart-line-up"></i>
+                </div>
+                <div class="logo-text">
+                    <h1>富足軌跡 <span>WealthPath</span></h1>
+                    <p>長期股票投資分析與記帳工具</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="btn-theme-toggle" class="btn btn-secondary" title="切換紅綠配色">
+                    <i class="fa-solid fa-palette"></i> <span>美股/台股配色</span>
+                </button>
+                <button id="btn-sync-panel" class="btn btn-secondary" title="備份與同步">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> <span>備份同步</span>
+                </button>
+                <button id="btn-add-transaction-trigger" class="btn btn-primary">
+                    <i class="fa-solid fa-plus"></i> <span>新增交易</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Grid -->
+        <main class="dashboard-grid">
+            <!-- 1. Top Level Metrics Row -->
+            <section class="metrics-row" aria-label="投資組合總覽指標">
+                <!-- Card 1: Total Portfolio Value -->
+                <div class="metric-card" id="card-total-value">
+                    <div class="card-icon value-icon">
+                        <i class="fa-solid fa-wallet"></i>
+                    </div>
+                    <div class="card-content">
+                        <span class="card-label">總資產現值</span>
+                        <div class="card-value" id="val-total-value">$0</div>
+                        <div class="card-subtext" id="sub-total-value">含未實現損益</div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Total Cost -->
+                <div class="metric-card" id="card-total-cost">
+                    <div class="card-icon cost-icon">
+                        <i class="fa-solid fa-hand-holding-dollar"></i>
+                    </div>
+                    <div class="card-content">
+                        <span class="card-label">總投入成本</span>
+                        <div class="card-value" id="val-total-cost">$0</div>
+                        <div class="card-subtext" id="sub-total-cost">原始購入金額及手續費</div>
+                    </div>
+                </div>
+
+                <!-- Card 3: Total Profit/Loss -->
+                <div class="metric-card" id="card-total-profit">
+                    <div class="card-icon profit-icon">
+                        <i class="fa-solid fa-sack-dollar"></i>
+                    </div>
+                    <div class="card-content">
+                        <span class="card-label">累積淨損益</span>
+                        <div class="card-value" id="val-total-profit">$0</div>
+                        <div class="card-subtext" id="sub-total-profit">---</div>
+                    </div>
+                </div>
+
+                <!-- Card 4: Net ROI% -->
+                <div class="metric-card" id="card-total-roi">
+                    <div class="card-icon roi-icon">
+                        <i class="fa-solid fa-percent"></i>
+                    </div>
+                    <div class="card-content">
+                        <span class="card-label">投資報酬率 (ROI)</span>
+                        <div class="card-value" id="val-total-roi">0.00%</div>
+                        <div class="card-subtext" id="sub-total-roi">累積投資回報率</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Mid Section: Left Column (Holdings Table), Right Column (Charts) -->
+            <div class="dashboard-body">
+                <!-- Left Column: Portfolio Holdings Table -->
+                <section class="holdings-section card-wrapper">
+                    <div class="card-header">
+                        <div class="title-area">
+                            <h2><i class="fa-solid fa-list-check"></i> 持股明細</h2>
+                            <p class="subtitle">自動獲取最新股價並計算即時損益</p>
+                        </div>
+                        <div class="search-filter-bar">
+                            <div class="search-wrapper">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="holdings-search" placeholder="搜尋股號/股名...">
+                            </div>
+                            <div class="select-wrapper">
+                                <select id="holdings-sort">
+                                    <option value="value-desc">市值 (大 → 小)</option>
+                                    <option value="value-asc">市值 (小 → 大)</option>
+                                    <option value="roi-desc">損益% (高 → 低)</option>
+                                    <option value="roi-asc">損益% (低 → 高)</option>
+                                    <option value="profit-desc">損益金額 (高 → 低)</option>
+                                    <option value="profit-asc">損益金額 (低 → 高)</option>
+                                    <option value="symbol">股號排序</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="holdings-table" id="table-holdings">
+                            <thead>
+                                <tr>
+                                    <th>股號 / 名稱</th>
+                                    <th class="txt-right">即時現價</th>
+                                    <th class="txt-right">持股均價</th>
+                                    <th class="txt-right">持有股數</th>
+                                    <th class="txt-right">投入成本</th>
+                                    <th class="txt-right">資產現值</th>
+                                    <th class="txt-right">未實現損益</th>
+                                    <th class="txt-right">損益百分比</th>
+                                    <th class="txt-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="holdings-tbody">
+                                <!-- Dynamic JS injection -->
+                                <tr>
+                                    <td colspan="9" class="empty-state">
+                                        <i class="fa-solid fa-folder-open empty-icon"></i>
+                                        <p>目前尚無持股資料。請點擊「新增交易」來記錄您的第一筆投資！</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Right Column: Visualizations & Charts -->
+                <section class="charts-section card-wrapper">
+                    <div class="card-header">
+                        <div class="title-area">
+                            <h2><i class="fa-solid fa-chart-pie"></i> 視覺化分析</h2>
+                            <p class="subtitle">多維度透視您的資產分佈與表現</p>
+                        </div>
+                        <div class="chart-tabs">
+                            <button class="chart-tab active" data-chart="allocation">資產分佈</button>
+                            <button class="chart-tab" data-chart="cost-value">成本與市值</button>
+                            <button class="chart-tab" data-chart="performance">個股回報</button>
+                        </div>
+                    </div>
+
+                    <div class="chart-container-wrapper">
+                        <!-- Chart Area 1: Allocation -->
+                        <div class="chart-view active" id="chart-view-allocation">
+                            <canvas id="chart-allocation"></canvas>
+                        </div>
+                        <!-- Chart Area 2: Cost vs Value -->
+                        <div class="chart-view" id="chart-view-cost-value">
+                            <canvas id="chart-cost-value"></canvas>
+                        </div>
+                        <!-- Chart Area 3: Performance -->
+                        <div class="chart-view" id="chart-view-performance">
+                            <canvas id="chart-performance"></canvas>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Toast Notifications Container -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <!-- MODAL 1: Add/Edit Transaction -->
+        <div id="modal-transaction" class="modal-overlay">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3 id="modal-title"><i class="fa-solid fa-plus-circle"></i> 新增交易明細</h3>
+                    <button class="modal-close" id="btn-close-transaction-modal">&times;</button>
+                </div>
+                <form id="form-transaction" class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tx-symbol">股票代號 / 股號 <span class="required">*</span></label>
+                            <div class="input-with-search">
+                                <input type="text" id="tx-symbol" required placeholder="例如: 2330 或 AAPL" autocomplete="off">
+                                <button type="button" id="btn-fetch-preview" class="btn btn-small btn-secondary" title="測試獲取最新資訊">
+                                    <i class="fa-solid fa-rotate"></i> 查詢
+                                </button>
+                            </div>
+                            <small class="form-help">輸入後點選「查詢」可自動取得股名與最新價格</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="tx-name">股票名稱 <span class="required">*</span></label>
+                            <input type="text" id="tx-name" required placeholder="如：台積電 / Apple">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tx-type">交易類型</label>
+                            <select id="tx-type">
+                                <option value="buy" selected>買入 (Buy)</option>
+                                <option value="sell">賣出 (Sell)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="tx-date">交易日期</label>
+                            <input type="date" id="tx-date" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tx-price">成交價格 (單股) <span class="required">*</span></label>
+                            <input type="number" id="tx-price" step="any" min="0.0001" required placeholder="請輸入購入單價">
+                        </div>
+                        <div class="form-group">
+                            <label for="tx-shares">成交股數 <span class="required">*</span></label>
+                            <input type="number" id="tx-shares" step="any" min="0.0001" required placeholder="整股或零股">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="tx-fee">交易手續費 (選填)</label>
+                            <input type="number" id="tx-fee" step="any" min="0" value="0" placeholder="手續費金額">
+                        </div>
+                        <div class="form-group">
+                            <label for="tx-tax">交易稅 (選填)</label>
+                            <input type="number" id="tx-tax" step="any" min="0" value="0" placeholder="證交稅金額（通常於賣出時產生）">
+                        </div>
+                    </div>
+
+                    <div class="form-group form-preview-result">
+                        <div class="preview-metric-box">
+                            <span class="preview-label">估算交易總金額</span>
+                            <span class="preview-value" id="tx-preview-total">$0</span>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" id="btn-cancel-transaction">取消</button>
+                        <button type="submit" class="btn btn-primary">確認儲存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL 2: Backup / Sync Panel -->
+        <div id="modal-sync" class="modal-overlay">
+            <div class="modal-card" style="max-width: 650px;">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-cloud-arrow-up"></i> 備份與跨裝置雲端同步</h3>
+                    <button class="modal-close" id="btn-close-sync-modal">&times;</button>
+                </div>
+                <div class="modal-body sync-modal-content">
+                    
+                    <!-- Tab Headers -->
+                    <div class="sync-tabs">
+                        <button class="sync-tab-btn active" data-tab="github-sync"><i class="fa-brands fa-github"></i> GitHub 雲端同步</button>
+                        <button class="sync-tab-btn" data-tab="local-backup"><i class="fa-solid fa-file-export"></i> 本地備份匯入/出</button>
+                    </div>
+
+                    <!-- Tab content 1: GitHub Cloud Sync -->
+                    <div class="sync-tab-content active" id="tab-github-sync">
+                        <!-- Unlinked State -->
+                        <div id="github-unlinked-state" class="sync-state-container">
+                            <p class="description">
+                                本工具採用 <strong>GitHub Gist (私密隨手記)</strong> 作為雲端資料庫。
+                                設定完成後，不需架設伺服器，即可在手機（iPhone）與電腦間雙向即時同步！您的資料儲存在您個人的 GitHub，完全私密且安全。
+                            </p>
+                            
+                            <form id="form-github-setup" class="github-setup-form">
+                                <div class="form-group">
+                                    <label for="gh-token">GitHub 個人存取權杖 (Personal Access Token, PAT) <span class="required">*</span></label>
+                                    <input type="password" id="gh-token" required placeholder="請貼上您的 ghp_ 開頭的權杖..." autocomplete="off">
+                                    <small class="form-help">
+                                        需要具有 <code>gist</code> 權限的權杖。
+                                        <a href="https://github.com/settings/tokens/new?scopes=gist&description=WealthPathStockTracker" target="_blank" class="text-link">
+                                            <i class="fa-solid fa-arrow-up-right-from-square"></i> 按此快速至 GitHub 產生權杖
+                                        </a> (需登入 GitHub)
+                                    </small>
+                                </div>
+                                
+                                <div class="form-group" style="margin-top: 10px;">
+                                    <label for="gh-gist-id">現有 Gist ID (選填)</label>
+                                    <input type="text" id="gh-gist-id" placeholder="若已有記帳檔 Gist ID 請輸入，留空將會自動建立新帳本">
+                                    <small class="form-help">要在新裝置（如 iPhone）上同步現有資料，請使用 QR Code 掃描或手動輸入此處。</small>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary" style="margin-top: 10px; width: 100%;">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i> 啟動 GitHub 雲端同步
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Linked State -->
+                        <div id="github-linked-state" class="sync-state-container" style="display: none;">
+                            <div class="sync-status-badge">
+                                <i class="fa-solid fa-circle-check text-success"></i> 已成功連結 GitHub 雲端
+                            </div>
+                            
+                            <div class="sync-info-box">
+                                <div class="info-row">
+                                    <span class="info-label">雲端儲存 ID (Gist ID)</span>
+                                    <span class="info-value code-text" id="display-gist-id">---</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">最後同步時間</span>
+                                    <span class="info-value" id="display-sync-time">隨時自動同步</span>
+                                </div>
+                            </div>
+
+                            <hr class="modal-divider" style="margin: 15px 0;">
+
+                            <div class="iphone-sync-section">
+                                <h4><i class="fa-solid fa-mobile-screen-button"></i> 用 iPhone 掃描即可查看與記帳</h4>
+                                <p class="description">
+                                    請使用 iPhone 相機掃描下方的 QR Code，即可在手機上載入完全相同的股票記帳資料庫。
+                                    手機會自動記住金鑰，網址中包含的敏感金鑰會在開啟後**自動隱藏**。
+                                </p>
+                                
+                                <div class="qr-code-wrapper">
+                                    <div id="sync-qrcode" class="qr-code-box">
+                                        <!-- QR Code Image will be injected here -->
+                                        <div class="qr-placeholder"><i class="fa-solid fa-spinner fa-spin"></i> 正在產生 QR Code...</div>
+                                    </div>
+                                    <div class="qr-actions">
+                                        <button id="btn-copy-sync-link" class="btn btn-secondary btn-small">
+                                            <i class="fa-solid fa-copy"></i> 複製同步網址
+                                        </button>
+                                        <small class="form-help" style="text-align: center; display: block; margin-top: 8px;">
+                                            無法掃描時，可複製網址傳送至手機開啟
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                                <button id="btn-sync-now" class="btn btn-success">
+                                    <i class="fa-solid fa-arrows-rotate"></i> 立即手動同步
+                                </button>
+                                <button id="btn-disconnect-github" class="btn btn-danger">
+                                    <i class="fa-solid fa-unlink"></i> 中斷雲端連結
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab content 2: Local Backup -->
+                    <div class="sync-tab-content" id="tab-local-backup">
+                        <section class="sync-section">
+                            <h4><i class="fa-solid fa-file-export"></i> 匯出與匯入本地資料</h4>
+                            <p class="description">如果您不想使用雲端，您也可以將資料下載為備份檔。您隨時可以手動將此檔案匯入至其他裝置。</p>
+                            
+                            <div class="sync-action-buttons">
+                                <button id="btn-export-json" class="btn btn-success">
+                                    <i class="fa-solid fa-download"></i> 匯出備份檔案 (.json)
+                                </button>
+                                <div class="file-upload-wrapper">
+                                    <button class="btn btn-secondary btn-file-mock">
+                                        <i class="fa-solid fa-upload"></i> 匯入備份檔案
+                                    </button>
+                                    <input type="file" id="input-import-json" accept=".json">
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="btn-close-sync-footer">完成</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 3: Edit Custom Stock Name & Manual Price Overwrite -->
+        <div id="modal-edit-stock" class="modal-overlay">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-pen-to-square"></i> 修改持股參數</h3>
+                    <button class="modal-close" id="btn-close-edit-stock-modal">&times;</button>
+                </div>
+                <form id="form-edit-stock" class="modal-body">
+                    <input type="hidden" id="edit-stock-symbol">
+                    
+                    <div class="form-group">
+                        <label>股票代號 (不予修改)</label>
+                        <input type="text" id="edit-stock-symbol-display" disabled class="disabled-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-stock-name">股票名稱</label>
+                        <input type="text" id="edit-stock-name" required placeholder="如：台積電">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-stock-price">當前現價 (手動覆蓋)</label>
+                        <input type="number" id="edit-stock-price" step="any" min="0" placeholder="輸入此值將覆蓋自動獲取的價格">
+                        <small class="form-help">若網路獲取失敗或價格有落差，可手動設定現價。若要還原自動抓取，請留空。</small>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" id="btn-cancel-edit-stock">取消</button>
+                        <button type="submit" class="btn btn-primary">確認更新</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="app-footer-bar">
+            <p>&copy; 2026 富足軌跡 WealthPath. 採用本地瀏覽器加密儲存技術，保護您的資產隱私。</p>
+            <p class="api-status"><i class="fa-solid fa-circle-check"></i> 行情資料來源：Yahoo Finance (延遲 15 分鐘)</p>
+        </footer>
+    </div>
+    
+    <!-- Main Script JS -->
+    <script src="app.js"></script>
+</body>
+</html>
