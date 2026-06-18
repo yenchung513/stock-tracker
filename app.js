@@ -101,12 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
     calculatePortfolio();
     updateUI();
     
-    // Auto-fetch latest stock prices at startup (delay slightly to prevent blocking main UI thread)
-    setTimeout(refreshAllPrices, 1000);
-    
-    // 如果已連結 GitHub，在啟動後背景自動同步拉取最新資料
+    // 如果已連結 GitHub，先從雲端下載最新帳本，下載完畢後才抓取即時價格 (避免覆寫最新股價的競爭危害)
     if (syncState.token && syncState.gistId) {
-        setTimeout(syncWithGithub, 1500);
+        setTimeout(async () => {
+            await syncWithGithub();
+            refreshAllPrices();
+        }, 1000);
+    } else {
+        // 如果是純本地模式，直接更新價格
+        setTimeout(refreshAllPrices, 1000);
     }
 });
 
@@ -518,54 +521,60 @@ function normalizeSymbol(symbol) {
  */
 async function fetchStockData(symbol) {
     const normalized = normalizeSymbol(symbol);
-    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${normalized}`;
     
-    // We implement sequential requests using different proxies to bypass CORS
-    const proxies = [
-        // Proxy 1: corsproxy.io direct format
-        `https://corsproxy.io/?${encodeURIComponent(chartUrl)}`,
-        // Proxy 2: corsproxy.io with url parameter
-        `https://corsproxy.io/?url=${encodeURIComponent(chartUrl)}`,
-        // Proxy 3: allorigins.win raw mode (faster and doesn't wrap in JSON)
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(chartUrl)}`
-    ];
-
-    // Try each proxy sequentially
-    for (let i = 0; i < proxies.length; i++) {
+    // 優先使用 Vercel 託管網域下的 /api/stock-price (無 CORS 且 100% 穩定)
+    // 若為本地 file:// 開啟，則因為無 serverless API，會直接跳至 fallback 公共代理
+    const cleanUrl = window.location.href.split('?')[0];
+    const isLocalFile = cleanUrl.startsWith('file://');
+    
+    let endpoints = [];
+    if (!isLocalFile) {
+        endpoints.push(`/api/stock-price?symbol=${normalized}`);
+    }
+    
+    // 備用公共 CORS 代理列表
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${normalized}`;
+    endpoints.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(chartUrl)}`);
+    endpoints.push(`https://corsproxy.io/?${encodeURIComponent(chartUrl)}`);
+    
+    // 依序嘗試各個端點
+    for (const url of endpoints) {
         try {
-            const response = await fetch(proxies[i]);
+            const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
                 const quote = parseYahooChart(data);
                 if (quote) return quote;
             }
         } catch (e) {
-            console.warn(`Proxy ${i + 1} failed for ${normalized}:`, e);
+            console.warn(`Fetch stock failed for ${normalized} via ${url}:`, e);
         }
     }
 
-    // If it's a Taiwanese stock ending with .TW and failed, try OTC suffix (.TWO)
+    // 如果是台股且失敗了，嘗試上櫃市場代號 (.TWO)
     if (normalized.endsWith('.TW')) {
         const otcSymbol = normalized.replace('.TW', '.TWO');
+        let otcEndpoints = [];
+        if (!isLocalFile) {
+            otcEndpoints.push(`/api/stock-price?symbol=${otcSymbol}`);
+        }
         const otcChartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${otcSymbol}`;
-        const otcProxies = [
-            `https://corsproxy.io/?${encodeURIComponent(otcChartUrl)}`,
-            `https://api.allorigins.win/raw?url=${encodeURIComponent(otcChartUrl)}`
-        ];
+        otcEndpoints.push(`https://api.allorigins.win/raw?url=${encodeURIComponent(otcChartUrl)}`);
+        otcEndpoints.push(`https://corsproxy.io/?${encodeURIComponent(otcChartUrl)}`);
         
-        for (let i = 0; i < otcProxies.length; i++) {
+        for (const url of otcEndpoints) {
             try {
-                const response = await fetch(otcProxies[i]);
+                const response = await fetch(url);
                 if (response.ok) {
                     const data = await response.json();
                     const quote = parseYahooChart(data);
                     if (quote) {
-                        quote.symbol = otcSymbol; // update to OTC symbol
+                        quote.symbol = otcSymbol; // 更新為上櫃代碼
                         return quote;
                     }
                 }
             } catch (e) {
-                console.warn(`OTC Proxy ${i + 1} failed for ${otcSymbol}:`, e);
+                console.warn(`Fetch OTC stock failed for ${otcSymbol} via ${url}:`, e);
             }
         }
     }
@@ -1281,6 +1290,7 @@ function setupEventListeners() {
         DOM.btnSyncNow.disabled = true;
         DOM.btnSyncNow.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 同步中...';
         await syncWithGithub();
+        await refreshAllPrices(); // 同步完最新交易後，順便重新拉取即時股價並上傳更新
         DOM.btnSyncNow.disabled = false;
         DOM.btnSyncNow.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> 立即手動同步';
     });
